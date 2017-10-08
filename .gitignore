@@ -1,0 +1,13 @@
+/*
+
+!.gitignore
+!README*
+!Makefile
+!include/
+!src/
+
+!data/
+data/*
+!data/Makefile
+
+**.swp
