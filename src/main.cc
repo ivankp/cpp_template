@@ -1,9 +1,7 @@
 #include <iostream>
 
-using std::cout;
-using std::cerr;
-using std::endl;
+using std::cout, std::cerr, std::endl;
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
 
 }

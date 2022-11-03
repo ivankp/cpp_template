@@ -1,70 +1,46 @@
-CXX := g++
-STD := -std=c++14
-CPPFLAGS := $(STD) -Iinclude
-CXXFLAGS := $(STD) -Wall -O3 -flto -Iinclude -fmax-errors=3
-# CXXFLAGS := $(STD) -Wall -g -Iinclude -fmax-errors=3
-LDFLAGS := $(STD) -O3 -flto
-LDLIBS :=
-
-SRC := src
-BIN := bin
-BLD := .build
-EXT := .cc
-
 .PHONY: all clean
 
-ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean)))
+ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean))) #############
 
-LDFLAGS += $(shell sed -r 's/([^:]+)(:|$$)/ -L\1/g' <<< "$$LIBRARY_PATH")
+CFLAGS := -Wall -O3 -flto
+# CFLAGS := -Wall -Og -g
+CFLAGS += -fmax-errors=3 -Iinclude
+# CFLAGS += -DNDEBUG
+# CFLAGS += -march=native
+# CFLAGS += -fPIC -fwrapv
 
-ROOT_CXXFLAGS := $(shell root-config --cflags)
-ROOT_LDFLAGS  := $(shell root-config --ldflags)
-ROOT_LDLIBS   := $(shell root-config --libs)
+# generate .d files during compilation
+DEPFLAGS = -MT $@ -MMD -MP -MF .build/$*.d
 
-# RPATH
-rpath_script := ldd $(shell root-config --libdir)/libTreePlayer.so \
-  | sed -nr 's|.*=> (.+)/.+\.so[.0-9]* \(.*|\1|p' \
-  | sort -u \
-  | sed -nr '/^(\/usr)?\/lib/!s/^/-Wl,-rpath=/p'
-ROOT_LIBS += $(shell $(rpath_script))
+FIND_MAIN := \
+  find src -type f -regex '.*\.cc?$$' \
+  | xargs grep -l '^\s*int\s\+main\s*(' \
+  | sed 's:^src/\(.*\)\.c\+$$:bin/\1:'
+EXE := $(shell $(FIND_MAIN))
 
-CXXFLAGS += $(ROOT_CXXFLAGS)
-LDFLAGS += $(ROOT_LDFLAGS)
-LDLIBS += $(ROOT_LDLIBS)
+all: $(EXE)
 
-# C_main :=
-# L_main :=
+.PRECIOUS: .build/%.o
 
-SRCS := $(shell find $(SRC) -type f -name '*$(EXT)')
-DEPS := $(patsubst $(SRC)/%$(EXT),$(BLD)/%.d,$(SRCS))
+bin/%: .build/%.o
+	@mkdir -pv $(dir $@)
+	$(CXX) $(LDFLAGS) $(filter %.o,$^) -o $@ $(LDLIBS)
 
-GREP_EXES := grep -rl '^ *int \+main *(' $(SRC) --include='*$(EXT)'
-EXES := $(patsubst $(SRC)%$(EXT),$(BIN)%,$(shell $(GREP_EXES)))
+%.so: .build/%.o
+	$(CXX) $(LDFLAGS) -shared $(filter %.o,$^) -o $@ $(LDLIBS)
 
-all: $(EXES)
+.build/%.o: src/%.cc
+	@mkdir -pv $(dir $@)
+	$(CXX) -std=c++20 $(CFLAGS) $(DEPFLAGS) -c $(filter %.cc,$^) -o $@
 
-# $(BIN)/main:
+.build/%.o: src/%.c
+	@mkdir -pv $(dir $@)
+	$(CC) $(CFLAGS) $(DEPFLAGS) -c $(filter %.c,$^) -o $@
 
--include $(DEPS)
+-include $(shell [ -d '.build' ] && find .build -type f -name '*.d')
 
-.SECONDEXPANSION:
-
-$(DEPS): $(BLD)/%.d: $(SRC)/%$(EXT) | $(BLD)/$$(dir %)
-	$(CXX) $(CPPFLAGS) -MM -MT '$(@:.d=.o)' $< -MF $@
-
-$(BLD)/%.o: | $(BLD)
-	$(CXX) $(CXXFLAGS) $(C_$*) -c $(filter %$(EXT),$^) -o $@
-
-$(BIN)/%: $(BLD)/%.o | $(BIN)
-	$(CXX) $(LDFLAGS) $(filter %.o,$^) -o $@ $(LDLIBS) $(L_$*)
-
-$(BIN):
-	mkdir -p $@
-
-$(BLD)/%/:
-	mkdir -p $@
-
-endif
+endif ###############################################################
 
 clean:
-	@rm -rfv $(BLD) $(BIN)
+	@rm -frv .build bin
+
